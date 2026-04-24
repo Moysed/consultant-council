@@ -47,15 +47,9 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/api/")) {
+  // Skip middleware for API routes and auth callback (let route handler exchange the code)
+  if (pathname.startsWith("/api/") || pathname.startsWith("/auth/")) {
     return supabaseResponse;
-  }
-
-  // Handle PKCE code exchange
-  const code = request.nextUrl.searchParams.get("code");
-  if (code) {
-    await supabase.auth.exchangeCodeForSession(code);
-    return redirectTo("/dashboard");
   }
 
   const publicPaths = ["/", "/login"];
