@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,8 @@ import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -125,9 +128,9 @@ export default function LoginPage() {
               </Button>
             </form>
           )}
-          {error && (
+          {(error || urlError) && (
             <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              {error}
+              {error || urlError}
             </p>
           )}
         </CardContent>
