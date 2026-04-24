@@ -9,6 +9,14 @@ export async function GET(request: Request) {
 
   if (code) {
     const cookieStore = await cookies();
+
+    // Track cookies set during exchange so we can forward them to the redirect
+    const cookiesToForward: {
+      name: string;
+      value: string;
+      options: Record<string, unknown>;
+    }[] = [];
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -18,12 +26,13 @@ export async function GET(request: Request) {
             return cookieStore.getAll();
           },
           setAll(cookiesToSet) {
+            cookiesToForward.push(...cookiesToSet);
             try {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               );
             } catch {
-              // Ignored
+              // Ignored in some contexts
             }
           },
         },
@@ -32,9 +41,14 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      const response = NextResponse.redirect(`${origin}${next}`);
+      // Forward auth cookies to the redirect response
+      cookiesToForward.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, options);
+      });
+      return response;
     }
-    // Show the actual error for debugging
+
     return NextResponse.redirect(
       `${origin}/login?error=${encodeURIComponent(error.message)}`
     );
