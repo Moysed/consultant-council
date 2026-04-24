@@ -4,13 +4,6 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  // Track cookie updates so we can forward them to redirect responses
-  let cookieUpdates: {
-    name: string;
-    value: string;
-    options: Record<string, unknown>;
-  }[] = [];
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -20,7 +13,6 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookieUpdates = cookiesToSet;
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -33,55 +25,31 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Helper: redirect with Supabase cookies forwarded
-  function redirectTo(pathname: string) {
-    const url = request.nextUrl.clone();
-    url.pathname = pathname;
-    url.search = "";
-    const response = NextResponse.redirect(url);
-    cookieUpdates.forEach(({ name, value, options }) => {
-      response.cookies.set(name, value, options);
-    });
-    return response;
-  }
-
   const { pathname } = request.nextUrl;
 
-  // Skip middleware for API routes and auth callback (let route handler exchange the code)
+  // Skip API routes and auth callback (route handler handles code exchange)
   if (pathname.startsWith("/api/") || pathname.startsWith("/auth/")) {
     return supabaseResponse;
   }
 
-  const publicPaths = ["/", "/login"];
-  const isPublicPath = publicPaths.some((p) => pathname === p);
-
-  const hasAuthCookie = request.cookies
-    .getAll()
-    .some((c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
-
-  if (!hasAuthCookie) {
-    if (!isPublicPath) {
-      return redirectTo("/login");
-    }
-    return supabaseResponse;
-  }
-
+  // Refresh session — important for token refresh
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const publicPaths = ["/", "/login"];
+  const isPublicPath = publicPaths.some((p) => pathname === p);
+
   if (!user && !isPublicPath) {
-    const response = redirectTo("/login");
-    // Clear stale auth cookies
-    request.cookies
-      .getAll()
-      .filter((c) => c.name.startsWith("sb-"))
-      .forEach((c) => response.cookies.delete(c.name));
-    return response;
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
   }
 
   if (user && pathname === "/login") {
-    return redirectTo("/dashboard");
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;
